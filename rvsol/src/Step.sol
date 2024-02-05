@@ -774,7 +774,7 @@ contract Step {
                 // CALL: msg.sender: this contract, 
                 // DELEGATECALL: msg.sender: tx.origin
 
-                let res := delegatecall(cgas, addr, memPtr, 0x44, 0x00, 0x40) // output into scratch space
+                let res := call(cgas, addr, 0, memPtr, 0x44, 0x00, 0x40) // output into scratch space
                 if res { // 1 on success
                     dat := mload(0x00)
                     datlen := mload(0x20)
@@ -794,7 +794,7 @@ contract Step {
                 // CALL: msg.sender: this contract
                 // DELEGATECALL: msg.sender: tx.origin
 
-                let res := delegatecall(cgas, addr, memPtr, 0x44, 0x00, 0x20) // output into scratch space
+                let res := call(cgas, addr, 0, memPtr, 0x44, 0x00, 0x20) // output into scratch space
                 if res { // 1 on success
                     localizedKey := mload(0x00)
                     leave
