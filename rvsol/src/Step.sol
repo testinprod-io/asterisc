@@ -785,7 +785,8 @@ contract Step {
                 mstore(add(memPtr, 0x24), localContext_)
                 let cgas := 100000 // TODO change call gas
                 
-                let res := call(cgas, addr, 0, memPtr, 0x44, 0x00, 0x20) // output into scratch space
+                // preserve msg.sender
+                let res := delegatecall(cgas, addr, memPtr, 0x44, 0x00, 0x20) // output into scratch space
                 if res { // 1 on success
                     localizedKey := mload(0x00)
                     leave
