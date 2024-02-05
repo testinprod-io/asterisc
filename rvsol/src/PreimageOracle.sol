@@ -52,7 +52,40 @@ contract PreimageOracle is IPreimageOracle {
         uint256 _size,
         uint256 _partOffset
     ) external returns (bytes32 key_) {
+        // Compute the localized key from the given local identifier.
+        key_ = PreimageKeyLib.localizeIdent(_ident, _localContext);
 
+        // Revert if the given part offset is not within bounds.
+        if (_partOffset > _size + 8 || _size > 32) {
+            // Revert with "PartOffsetOOB()"
+            assembly {
+                // Store "PartOffsetOOB()"
+                mstore(0, 0xfe254987)
+                // Revert with "PartOffsetOOB()"
+                revert(0x1c, 4)
+            }
+            // TODO: remove with revert PartOffsetOOB();
+        }
+
+        // Prepare the local data part at the given offset
+        bytes32 part;
+        assembly {
+            // Clean the memory in [0x20, 0x40)
+            mstore(0x20, 0x00)
+
+            // Store the full local data in scratch space.
+            mstore(0x00, shl(192, _size))
+            mstore(0x08, _word)
+
+            // Prepare the local data part at the requested offset.
+            part := mload(_partOffset)
+        }
+
+        // Store the first part with `_partOffset`.
+        preimagePartOk[key_][_partOffset] = true;
+        preimageParts[key_][_partOffset] = part;
+        // Assign the length of the preimage at the localized key.
+        preimageLengths[key_] = _size;
     }
 
     // loadKeccak256PreimagePart prepares the pre-image to be read by keccak256 key,
