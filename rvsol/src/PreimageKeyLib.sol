@@ -32,8 +32,7 @@ library PreimageKeyLib {
             let ptr := mload(0x40)
             // Store the local data key and caller next to each other in memory for hashing.
             mstore(0, _key)
-            // mstore(0x20, caller())
-            mstore(0, 0x1234)
+            mstore(0x20, caller())
             mstore(0x40, _localContext)
             // Localize the key with the above `localize` operation.
             localizedKey_ := or(and(keccak256(0, 0x60), not(shl(248, 0xFF))), shl(248, 1))
