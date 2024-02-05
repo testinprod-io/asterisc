@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -121,8 +122,9 @@ func newEVMEnv(t *testing.T, contracts *Contracts, addrs *Addresses) *vm.EVM {
 	env.StateDB.SetCode(addrs.RISCV, contracts.RISCV.DeployedBytecode.Object)
 	env.StateDB.SetCode(addrs.Oracle, contracts.Oracle.DeployedBytecode.Object)
 	env.StateDB.SetCode(addrs.PreimageKeyLib, contracts.Oracle.DeployedBytecode.Object)
-	env.StateDB.SetState(addrs.RISCV, common.Hash{}, addrs.Oracle.Hash()) // set storage slot pointing to preimage oracle
+	env.StateDB.SetState(addrs.RISCV, common.Hash{}, addrs.Oracle.Hash())          // set storage slot pointing to preimage oracle
 	env.StateDB.SetState(addrs.RISCV, common.Hash{1}, addrs.PreimageKeyLib.Hash()) // set slot pointing to preimageKeyLib
+	env.StateDB.AddBalance(addrs.Sender, abi.MaxUint256)
 
 	rules := env.ChainConfig().Rules(header.Number, true, header.Time)
 	env.StateDB.Prepare(rules, addrs.Sender, addrs.FeeRecipient, &addrs.RISCV, vm.ActivePrecompiles(rules), nil)
