@@ -776,7 +776,7 @@ contract Step {
                     datlen := mload(0x20)
                     leave
                 }
-                revertWithCode(0xbadf00d0)
+                revertWithCode(0x4321dead)
             }
 
             function localize(preImageKey, localContext_) -> localizedKey {
@@ -791,7 +791,7 @@ contract Step {
                     localizedKey := mload(0x00)
                     leave
                 }
-                revertWithCode(addr)
+                revertWithCode(0x1234dead)
 
                 // // TODO: deduplicate definition of localize using lib
                 // // Grab the current free memory pointer to restore later.
