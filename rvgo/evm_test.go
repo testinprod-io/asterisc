@@ -72,6 +72,15 @@ func loadPreimageOracleContractCode(t *testing.T) *Contract {
 	return &outDat
 }
 
+func loadPreimageKeyLibCode(t *testing.T) *Contract {
+	dat, err := os.ReadFile("../rvsol/out/PreimageKeyLib.sol/PreimageKeyLib.json")
+	require.NoError(t, err)
+	var outDat Contract
+	err = json.Unmarshal(dat, &outDat)
+	require.NoError(t, err)
+	return &outDat
+}
+
 type Contract struct {
 	DeployedBytecode struct {
 		Object    hexutil.Bytes `json:"object"`
@@ -84,15 +93,17 @@ func (c *Contract) SourceMap(sourcePaths []string) (*srcmap.SourceMap, error) {
 }
 
 type Contracts struct {
-	RISCV  *Contract
-	Oracle *Contract
+	RISCV          *Contract
+	Oracle         *Contract
+	PreimageKeyLib *Contract
 }
 
 type Addresses struct {
-	RISCV        common.Address
-	Oracle       common.Address
-	Sender       common.Address
-	FeeRecipient common.Address
+	RISCV          common.Address
+	Oracle         common.Address
+	PreimageKeyLib common.Address
+	Sender         common.Address
+	FeeRecipient   common.Address
 }
 
 func newEVMEnv(t *testing.T, contracts *Contracts, addrs *Addresses) *vm.EVM {
@@ -109,7 +120,9 @@ func newEVMEnv(t *testing.T, contracts *Contracts, addrs *Addresses) *vm.EVM {
 	env := vm.NewEVM(blockContext, vm.TxContext{}, state, chainCfg, vmCfg)
 	env.StateDB.SetCode(addrs.RISCV, contracts.RISCV.DeployedBytecode.Object)
 	env.StateDB.SetCode(addrs.Oracle, contracts.Oracle.DeployedBytecode.Object)
+	env.StateDB.SetCode(addrs.PreimageKeyLib, contracts.Oracle.DeployedBytecode.Object)
 	env.StateDB.SetState(addrs.RISCV, common.Hash{}, addrs.Oracle.Hash()) // set storage slot pointing to preimage oracle
+	env.StateDB.SetState(addrs.RISCV, common.Hash{1}, addrs.PreimageKeyLib.Hash()) // set slot pointing to preimageKeyLib
 
 	rules := env.ChainConfig().Rules(header.Number, true, header.Time)
 	env.StateDB.Prepare(rules, addrs.Sender, addrs.FeeRecipient, &addrs.RISCV, vm.ActivePrecompiles(rules), nil)
@@ -117,16 +130,18 @@ func newEVMEnv(t *testing.T, contracts *Contracts, addrs *Addresses) *vm.EVM {
 }
 
 var testAddrs = &Addresses{
-	RISCV:        common.HexToAddress("0x1337"),
-	Oracle:       common.HexToAddress("0xf00d"),
-	Sender:       common.HexToAddress("0x7070"),
-	FeeRecipient: common.HexToAddress("0xbd69"),
+	RISCV:          common.HexToAddress("0x1337"),
+	Oracle:         common.HexToAddress("0xf00d"),
+	PreimageKeyLib: common.HexToAddress("0x7331"),
+	Sender:         common.HexToAddress("0x7070"),
+	FeeRecipient:   common.HexToAddress("0xbd69"),
 }
 
 func testContracts(t *testing.T) *Contracts {
 	return &Contracts{
-		RISCV:  loadStepContractCode(t),
-		Oracle: loadPreimageOracleContractCode(t),
+		RISCV:          loadStepContractCode(t),
+		Oracle:         loadPreimageOracleContractCode(t),
+		PreimageKeyLib: loadPreimageKeyLibCode(t),
 	}
 }
 
@@ -137,9 +152,13 @@ func addTracer(t *testing.T, env *vm.EVM, addrs *Addresses, contracts *Contracts
 	require.NoError(t, err)
 	b, err := contracts.Oracle.SourceMap([]string{"../rvsol/src/PreimageOracle.sol"})
 	require.NoError(t, err)
+	c, err := contracts.PreimageKeyLib.SourceMap([]string{"../rvsol/src/PreimageKeyLib.sol"})
+	require.NoError(t, err)
+
 	env.Config.Tracer = srcmap.NewSourceMapTracer(map[common.Address]*srcmap.SourceMap{
-		addrs.RISCV:  a,
-		addrs.Oracle: b,
+		addrs.RISCV:          a,
+		addrs.Oracle:         b,
+		addrs.PreimageKeyLib: c,
 	}, os.Stdout)
 }
 

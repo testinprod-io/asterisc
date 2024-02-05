@@ -2,6 +2,7 @@
 src = 'src'
 out = 'out'
 libs = ['lib']
+libraries = ['src/PreimageKeyLib.sol:PreimageKeyLib:0x0000000000000000000000000000000000007331']
 optimizer = true
 optimizer_runs = 999999
 
