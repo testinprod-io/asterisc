@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
+import { IPreimageOracle } from "./interfaces/IPreimageOracle.sol";
+import { PreimageKeyLib } from "./PreimageKeyLib.sol";
 
-contract PreimageOracle {
+contract PreimageOracle is IPreimageOracle {
     mapping(bytes32 => uint256) public preimageLengths;
     mapping(bytes32 => mapping(uint256 => bytes32)) public preimageParts;
     mapping(bytes32 => mapping(uint256 => bool)) public preimagePartOk;
@@ -32,30 +34,25 @@ contract PreimageOracle {
         preimageLengths[key] = size;
     }
 
-    function localize(bytes32 _key, bytes32 _localContext) internal view returns (bytes32 localizedKey_) {
-        assembly {
-            // Grab the current free memory pointer to restore later.
-            let ptr := mload(0x40)
-            // Store the local data key and caller next to each other in memory for hashing.
-            mstore(0, _key)
-            mstore(0x20, caller())
-            mstore(0x40, _localContext)
-            // Localize the key with the above `localize` operation.
-            localizedKey_ := or(and(keccak256(0, 0x60), not(shl(248, 0xFF))), shl(248, 1))
-            // Restore the free memory pointer.
-            mstore(0x40, ptr)
-        }
-    }
-
     // temporary method for localizeation
     function cheatLocalKey(uint256 partOffset, bytes32 key, bytes32 part, uint256 size, bytes32 localContext) external {
         // sanity check key is local key using prefix
         require(uint8(key[0]) == 1, "must be used for local key");
         
-        bytes32 localizedKey = localize(key, localContext);
+        bytes32 localizedKey = PreimageKeyLib.localize(key, localContext);
         preimagePartOk[localizedKey][partOffset] = true;
         preimageParts[localizedKey][partOffset] = part;
         preimageLengths[localizedKey] = size;
+    }
+
+    function loadLocalData(
+        uint256 _ident,
+        bytes32 _localContext,
+        bytes32 _word,
+        uint256 _size,
+        uint256 _partOffset
+    ) external returns (bytes32 key_) {
+
     }
 
     // loadKeccak256PreimagePart prepares the pre-image to be read by keccak256 key,
@@ -94,4 +91,8 @@ contract PreimageOracle {
         preimageParts[key][_partOffset] = part;
         preimageLengths[key] = size;
     }
+
+     function loadSha256PreimagePart(uint256 _partOffset, bytes calldata _preimage) external {
+
+     }
 }
