@@ -774,10 +774,24 @@ contract Step {
                     datlen := mload(0x20)
                     leave
                 }
-                revertWithCode(0x4321dead)
+                revertWithCode(0xbadf00d0)
             }
 
             function localize(preImageKey, localContext_) -> localizedKey {
+                let addr := sload(preimageOraclePos()) // calling Oracle.localize(bytes32,uint256)
+                let memPtr := mload(0x40) // get pointer to free memory for preimage interactions
+                mstore(memPtr, shl(224, 0x1aae47f0)) // (32-4)*8=224: right-pad the function selector, and then store it as prefix
+                mstore(add(memPtr, 0x04), preImageKey)
+                mstore(add(memPtr, 0x24), localContext_)
+                let cgas := 100000 // TODO change call gas
+                
+                let res := call(cgas, addr, 0, memPtr, 0x44, 0x00, 0x20) // output into scratch space
+                if res { // 1 on success
+                    localizedKey := mload(0x00)
+                    leave
+                }
+                revertWithCode(0xbadf00d0)
+                
                 // let addr := sload(preimageKeyLibPos()) // calling PreimageKeyLib.localize(bytes32,bytes32)
                 // let memPtr := mload(0x40) // get pointer to free memory for preimage interactions
                 // mstore(memPtr, shl(224, 0x1aae47f0)) // (32-4)*8=224: right-pad the function selector, and then store it as prefix
@@ -797,15 +811,15 @@ contract Step {
 
                 // // TODO: deduplicate definition of localize using lib
                 // // Grab the current free memory pointer to restore later.
-                let ptr := mload(0x40)
-                // Store the local data key and caller next to each other in memory for hashing.
-                mstore(0, preImageKey)
-                mstore(0x20, caller())
-                mstore(0x40, localContext_)
-                // Localize the key with the above `localize` operation.
-                localizedKey := or(and(keccak256(0, 0x60), not(shl(248, 0xFF))), shl(248, 1))
-                // Restore the free memory pointer.
-                mstore(0x40, ptr)
+                // let ptr := mload(0x40)
+                // // Store the local data key and caller next to each other in memory for hashing.
+                // mstore(0, preImageKey)
+                // mstore(0x20, caller())
+                // mstore(0x40, localContext_)
+                // // Localize the key with the above `localize` operation.
+                // localizedKey := or(and(keccak256(0, 0x60), not(shl(248, 0xFF))), shl(248, 1))
+                // // Restore the free memory pointer.
+                // mstore(0x40, ptr)
             }
 
             function readPreimageValue(addr, count, localContext_) -> out {
