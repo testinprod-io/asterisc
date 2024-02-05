@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 import { IPreimageOracle } from "./interfaces/IPreimageOracle.sol";
-import { PreimageKeyLib } from "./PreimageKeyLib.sol";
 
 
 contract Step {
     IPreimageOracle public preimageOracle;
-    address public preimageKeyLib;
 
     constructor(IPreimageOracle _preimageOracle) {
         preimageOracle = _preimageOracle;
-        preimageKeyLib = address(PreimageKeyLib);
     }
 
     // Executes a single RISC-V instruction, starting from
@@ -23,9 +20,6 @@ contract Step {
 
             function preimageOraclePos() -> out { // slot of preimageOraclePos field
                 out := 0
-            }
-            function preimageKeyLibPos() -> out { // slot of preimageKeyLib field
-                out := 1
             }
 
             //
