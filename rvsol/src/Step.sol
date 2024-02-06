@@ -11,6 +11,7 @@ contract Step {
         preimageOracle = _preimageOracle;
     }
 
+    // we must use public scope because solidity compiler optimizes out
     function localize(bytes32 _key, bytes32 _localContext) public view returns (bytes32 localizedKey_) {
         return PreimageKeyLib.localize(_key, _localContext);
     }
