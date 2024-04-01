@@ -121,6 +121,34 @@ jobs:
         type: string
     steps:
       - checkout
+      - run:
+          name: "Fetch submodules for asterisc"
+          # TODO(pcw109550) Do not recursive update. do we need this???
+          command: git submodule update --init
       - restore_cache:
           key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
           name: Restore Go modules cache
+      - run:
+          name: Sanity check go mod cache path
+          command: test "$(go env GOMODCACHE)" == "/go/pkg/mod" # yes, it's an odd path
+          working_directory: rvsol/lib/optimism
+      - run:
+          command: go mod download
+          name: Download Go module dependencies
+          working_directory: rvsol/lib/optimism
+      - run:
+          name: "Go mod tidy"
+          command: make mod-tidy && git diff --exit-code
+          working_directory: rvsol/lib/optimism
+      - run:
+          name: run Go linter
+          command: |
+            # Identify how many cores it defaults to
+            golangci-lint --help | grep concurrency
+            make lint-go
+          working_directory: rvsol/lib/optimism
+      - save_cache:
+          key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
+          name: Save Go modules cache
+          paths:
+            - "/go/pkg/mod"
