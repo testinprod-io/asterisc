@@ -21,7 +21,7 @@ jobs:
           command: git submodule update --init
       - run:
           name: "Check L1 geth version"
-          command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
+          command: ls -al && pwd && ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
           working_directory: rvsol/lib/optimism
       - run:
           name: git submodules
