@@ -17,7 +17,8 @@ jobs:
       - checkout
       - run:
           name: "Fetch submodules for asterisc"
-          command: git submodule update --init --recursive
+          # TODO(pcw109550) Do not recursive
+          command: git submodule update --init
       - run:
           name: "Check L1 geth version"
           command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
