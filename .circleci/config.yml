@@ -35,6 +35,7 @@ jobs:
       - restore_cache:
           name: Restore Go modules cache
           # TODO(pcw109550) fix hardcoded path
+          # this go mod cache wil be populated from go-mod-download step
           key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
       # Fetch node_modules into the pnpm store
       # This will cache node_modules based on pnpm-lock so other steps can instantly install them with `pnpm install --prefer-offline`
