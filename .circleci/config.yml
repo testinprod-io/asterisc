@@ -15,6 +15,7 @@ jobs:
     resource_class: xlarge
     steps:
       - checkout
+          path: ./rvsol/lib/optimism
       - run:
           name: "Check L1 geth version"
           command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
