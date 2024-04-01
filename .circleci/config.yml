@@ -14,7 +14,10 @@ jobs:
       - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.46.1
     resource_class: xlarge
     steps:
-      - checkout:
+      - checkout
+      - run:
+          name: "Fetch submodules for asterisc"
+          command: git submodule update --init --recursive
       - run:
           name: "Check L1 geth version"
           command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
