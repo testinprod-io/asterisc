@@ -104,3 +104,22 @@ jobs:
             - ".devnet-plasma/addresses.json"
             - "packages/contracts-bedrock/deploy-config/devnetL1.json"
             - "packages/contracts-bedrock/deployments/devnetL1"
+
+  go-mod-download:
+    docker:
+        # TODO(pcw109550) temp hardcode. must update. this depends with rvsol/lib/optimism submodule version
+      - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.43.0
+    parameters:
+      file:
+        default: go.sum
+        description: The file name of checksum for restore_cache and save_cache.
+        type: string
+      key:
+        default: gomod
+        description: The key of restore_cache and save_cache.
+        type: string
+    steps:
+      - checkout
+      - restore_cache:
+          key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
+          name: Restore Go modules cache
