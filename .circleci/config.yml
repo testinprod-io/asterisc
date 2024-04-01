@@ -3,7 +3,8 @@ version: 2.1
 workflows:
   main:
     jobs:
-      - pnpm-monorepo
+      - pnpm-monorepo:
+          name: pnpm-monorepo
       - go-mod-download-monorepo
       - go-mod-download-asterisc
       # - asterisc-prestate
