@@ -6,6 +6,7 @@ workflows:
       - pnpm-monorepo:
           name: pnpm-monorepo
       - go-mod-download-monorepo
+      - go-mod-download-asterisc
       # - asterisc-prestate
 
 jobs:
@@ -34,7 +35,7 @@ jobs:
             # TODO(pcw109550) fix hardcoded path
             - pnpm-packages-v2-{{ checksum "rvsol/lib/optimism/pnpm-lock.yaml" }}
       - restore_cache:
-          name: Restore Go modules cache
+          name: Restore Go modules cache for monorepo
           # TODO(pcw109550) fix hardcoded path
           # this go mod cache wil be populated from go-mod-download-monorepo step
           key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
@@ -147,6 +148,40 @@ jobs:
             golangci-lint --help | grep concurrency
             make lint-go
           working_directory: rvsol/lib/optimism
+      - save_cache:
+          key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
+          name: Save Go modules cache
+          paths:
+            - "/go/pkg/mod"
+
+  go-mod-download-asterisc:
+    docker:
+        # TODO(pcw109550) temp hardcode. must update. this depends with rvsol/lib/optimism submodule version
+        # for asterisc, we may use other image
+      - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.43.0
+    parameters:
+      file:
+        default: go.sum
+        description: The file name of checksum for restore_cache and save_cache.
+        type: string
+      key:
+        default: gomod
+        description: The key of restore_cache and save_cache.
+        type: string
+    steps:
+      - checkout
+      - restore_cache:
+          key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
+          name: Restore Go modules cache
+      - run:
+          name: Sanity check go mod cache path
+          command: test "$(go env GOMODCACHE)" == "/go/pkg/mod" # yes, it's an odd path
+      - run:
+          command: go mod download
+          name: Download Go module dependencies
+      - run:
+          name: "Go mod tidy"
+          command: make mod-tidy && git diff --exit-code
       - save_cache:
           key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
           name: Save Go modules cache
