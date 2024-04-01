@@ -1,31 +1,87 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine.
-# See: https://circleci.com/docs/configuration-reference
 version: 2.1
 
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/jobs-steps/#jobs-overview & https://circleci.com/docs/configuration-reference/#jobs
-jobs:
-  say-hello:
-    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/executor-intro/ & https://circleci.com/docs/configuration-reference/#executor-job
-    docker:
-      # Specify the version you desire here
-      # See: https://circleci.com/developer/images/image/cimg/base
-      - image: cimg/base:current
+workflows:
+  main:
+    jobs:
+      - pnpm-monorepo:
+          name: pnpm-monorepo
+  
 
-    # Add steps to the job
-    # See: https://circleci.com/docs/jobs-steps/#steps-overview & https://circleci.com/docs/configuration-reference/#steps
+jobs:
+  pnpm-monorepo:
+    docker:
+        # TODO(pcw109550) temp hardcode
+      - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.46.1
+    resource_class: xlarge
     steps:
-      # Checkout the code as the first step.
       - checkout
       - run:
-          name: "Say hello"
-          command: "echo Hello, World!"
-
-# Orchestrate jobs using workflows
-# See: https://circleci.com/docs/workflows/ & https://circleci.com/docs/configuration-reference/#workflows
-workflows:
-  say-hello-workflow: # This is the name of the workflow, feel free to change it to better match your workflow.
-    # Inside the workflow, you define the jobs you want to run.
-    jobs:
-      - say-hello
+          name: "Check L1 geth version"
+          command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
+      - run:
+          name: git submodules
+          command: make submodules
+      - restore_cache:
+          name: Restore PNPM Package Cache
+          keys:
+            - pnpm-packages-v2-{{ checksum "pnpm-lock.yaml" }}
+      - restore_cache:
+          name: Restore Go modules cache
+          key: gomod-{{ checksum "go.sum" }}
+      # Fetch node_modules into the pnpm store
+      # This will cache node_modules based on pnpm-lock so other steps can instantly install them with `pnpm install --prefer-offline`
+      # --prefer-offline installs node_modules instantly by just reading from cache if it exists rather than fetching from network
+      # when installing node_modules pnpm simply adds symlinks instead of copying the files which is why it is pretty much instant to run --prefer-offline
+      # this allows a caching strategy of only checking pnpm-lockfile so we don't have to keep it in sync with our packages
+      # For more information see https://pnpm.io/cli/fetch
+      - run:
+          name: Fetch dependencies
+          command: pnpm fetch --frozen-lockfile --prefer-offline
+      - save_cache:
+          name: Save PNPM Package Cache
+          key: pnpm-packages-v2-{{ checksum "pnpm-lock.yaml" }}
+          paths:
+            - "node_modules"
+      - run:
+          name: Install dependencies
+          command: pnpm install:ci:offline
+      - run:
+          name: print forge version
+          command: forge --version
+      - run:
+          name: Build monorepo
+          environment:
+            FOUNDRY_PROFILE: ci
+          command: pnpm build
+      - run:
+          name: Generate FPAC allocs
+          command: DEVNET_FPAC="true" make devnet-allocs
+      - run:
+          name: Copy FPAC allocs to .devnet-fpac
+          command: cp -r .devnet/ .devnet-fault-proofs/
+      - run:
+          name: Generate Plasma allocs
+          command: DEVNET_PLASMA="true" make devnet-allocs
+      - run:
+          name: Copy Plasma allocs to .devnet-plasma
+          command: cp -r .devnet/ .devnet-plasma/
+      - run:
+          name: Generate non-FPAC allocs
+          command: make devnet-allocs
+      - persist_to_workspace:
+          root: "."
+          paths:
+            - "packages/**/dist"
+            - "packages/contracts-bedrock/cache"
+            - "packages/contracts-bedrock/artifacts"
+            - "packages/contracts-bedrock/forge-artifacts"
+            - "packages/contracts-bedrock/tsconfig.tsbuildinfo"
+            - "packages/contracts-bedrock/tsconfig.build.tsbuildinfo"
+            - ".devnet/allocs-l1.json"
+            - ".devnet/addresses.json"
+            - ".devnet-fault-proofs/allocs-l1.json"
+            - ".devnet-fault-proofs/addresses.json"
+            - ".devnet-plasma/allocs-l1.json"
+            - ".devnet-plasma/addresses.json"
+            - "packages/contracts-bedrock/deploy-config/devnetL1.json"
+            - "packages/contracts-bedrock/deployments/devnetL1"
