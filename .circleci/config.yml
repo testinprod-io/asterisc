@@ -13,9 +13,10 @@ jobs:
         # TODO(pcw109550) temp hardcode
       - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.46.1
     resource_class: xlarge
+    working_directory: ~/asterisc/rvsol/lib/optimism
     steps:
       - checkout:
-          path: ./rvsol/lib/optimism
+          path: ~/asterisc/rvsol/lib/optimism
       - run:
           name: "Check L1 geth version"
           command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
