@@ -112,7 +112,7 @@ jobs:
       - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.43.0
     parameters:
       file:
-        default: go.sum
+        default: rvsol/lib/optimism/go.sum
         description: The file name of checksum for restore_cache and save_cache.
         type: string
       key:
