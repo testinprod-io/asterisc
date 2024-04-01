@@ -21,7 +21,7 @@ jobs:
           command: git submodule update --init
       - run:
           name: "Check L1 geth version"
-          command: ls -al && pwd && ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
+          command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
           working_directory: rvsol/lib/optimism
       - run:
           name: git submodules for monorepo
@@ -32,7 +32,6 @@ jobs:
           keys:
             # TODO(pcw109550) fix hardcoded path
             - pnpm-packages-v2-{{ checksum "rvsol/lib/optimism/pnpm-lock.yaml" }}
-          working_directory: rvsol/lib/optimism
       - restore_cache:
           name: Restore Go modules cache
           # TODO(pcw109550) fix hardcoded path
