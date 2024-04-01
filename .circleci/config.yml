@@ -34,8 +34,8 @@ jobs:
           working_directory: rvsol/lib/optimism
       - restore_cache:
           name: Restore Go modules cache
-          key: gomod-{{ checksum "go.sum" }}
-          working_directory: rvsol/lib/optimism
+          # TODO(pcw109550) fix hardcoded path
+          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
       # Fetch node_modules into the pnpm store
       # This will cache node_modules based on pnpm-lock so other steps can instantly install them with `pnpm install --prefer-offline`
       # --prefer-offline installs node_modules instantly by just reading from cache if it exists rather than fetching from network
@@ -48,10 +48,10 @@ jobs:
           working_directory: rvsol/lib/optimism
       - save_cache:
           name: Save PNPM Package Cache
-          key: pnpm-packages-v2-{{ checksum "pnpm-lock.yaml" }}
-          working_directory: rvsol/lib/optimism
+          # TODO(pcw109550) fix hardcoded path
+          key: pnpm-packages-v2-{{ checksum "rvsol/lib/optimism/pnpm-lock.yaml" }}
           paths:
-            - "node_modules"
+            - "rvsol/lib/optimism/node_modules"
       - run:
           name: Install dependencies
           command: pnpm install:ci:offline
