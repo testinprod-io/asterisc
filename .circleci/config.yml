@@ -6,7 +6,7 @@ workflows:
       - pnpm-monorepo:
           name: pnpm-monorepo
       - go-mod-download-monorepo
-      - asterisc-prestate:
+      # - asterisc-prestate
 
 jobs:
   pnpm-monorepo:
