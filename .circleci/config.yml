@@ -5,8 +5,8 @@ workflows:
     jobs:
       - pnpm-monorepo:
           name: pnpm-monorepo
-      - go-mod-download
-  
+      - go-mod-download-monorepo
+      - asterisc-prestate:
 
 jobs:
   pnpm-monorepo:
@@ -36,7 +36,7 @@ jobs:
       - restore_cache:
           name: Restore Go modules cache
           # TODO(pcw109550) fix hardcoded path
-          # this go mod cache wil be populated from go-mod-download step
+          # this go mod cache wil be populated from go-mod-download-monorepo step
           key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
       # Fetch node_modules into the pnpm store
       # This will cache node_modules based on pnpm-lock so other steps can instantly install them with `pnpm install --prefer-offline`
@@ -106,7 +106,7 @@ jobs:
             - "packages/contracts-bedrock/deploy-config/devnetL1.json"
             - "packages/contracts-bedrock/deployments/devnetL1"
 
-  go-mod-download:
+  go-mod-download-monorepo:
     docker:
         # TODO(pcw109550) temp hardcode. must update. this depends with rvsol/lib/optimism submodule version
       - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.43.0
