@@ -14,7 +14,7 @@ jobs:
       - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.46.1
     resource_class: xlarge
     steps:
-      - checkout
+      - checkout:
           path: ./rvsol/lib/optimism
       - run:
           name: "Check L1 geth version"
