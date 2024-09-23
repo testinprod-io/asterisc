@@ -259,6 +259,8 @@ func Run(ctx *cli.Context) error {
 	if err := jsonutil.WriteJSON(ctx.Path(cannon.RunOutputFlag.Name), state, OutFilePerm); err != nil {
 		return fmt.Errorf("failed to write state output: %w", err)
 	}
+
+	state.Close()
 	return nil
 }
 

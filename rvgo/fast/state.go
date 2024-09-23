@@ -3,6 +3,7 @@ package fast
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -73,6 +74,13 @@ func (state *VMState) SetWitnessAndStateHash() error {
 	}
 	state.StateHash = stateHash
 	return nil
+}
+
+func (state *VMState) Close() {
+	// When done, close the Memory instance
+	if err := state.Memory.Close(); err != nil {
+		log.Fatalf("Error closing Memory: %v", err)
+	}
 }
 
 func (state *VMState) GetStep() uint64 { return state.Step }

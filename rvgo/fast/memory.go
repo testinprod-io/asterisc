@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"sort"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -45,6 +48,9 @@ type Memory struct {
 	radix         *L1
 	branchFactors [10]uint64
 
+	stats     *Stats // Reference to your Stats struct
+	statsFile string // Filename for the CSV output
+
 	// Note: since we don't de-alloc pages, we don't do ref-counting.
 	// Once a page exists, it doesn't leave memory
 
@@ -56,12 +62,32 @@ type Memory struct {
 
 func NewMemory() *Memory {
 	node := &L1{}
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 	return &Memory{
 		radix:         node,
+		stats:         NewStats(),
 		pages:         make(map[uint64]*CachedPage),
 		branchFactors: [10]uint64{4, 4, 4, 4, 4, 4, 4, 8, 8, 8},
 		lastPageKeys:  [2]uint64{^uint64(0), ^uint64(0)}, // default to invalid keys, to not match any pages
 	}
+}
+
+func (m *Memory) Close() error {
+	// Perform any necessary cleanup here
+
+	// Write the statistics to the CSV file
+	if m.stats != nil && m.statsFile != "" {
+		err := m.stats.WriteToCSV(m.statsFile)
+		if err != nil {
+			return fmt.Errorf("failed to write stats to CSV: %w", err)
+		}
+	}
+
+	// If you have any other resources to clean up, do it here
+
+	return nil
 }
 
 func (m *Memory) PageCount() int {
@@ -202,6 +228,7 @@ func (m *Memory) UnmarshalJSON(data []byte) error {
 
 	m.branchFactors = [10]uint64{4, 4, 4, 4, 4, 4, 4, 8, 8, 8}
 	m.radix = &L1{}
+	m.stats = NewStats()
 	m.pages = make(map[uint64]*CachedPage)
 	m.lastPageKeys = [2]uint64{^uint64(0), ^uint64(0)}
 	m.lastPage = [2]*CachedPage{nil, nil}

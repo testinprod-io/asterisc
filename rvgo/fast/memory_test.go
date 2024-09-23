@@ -423,6 +423,7 @@ func BenchmarkMemoryOperations(b *testing.B) {
 		{"MerkleProofGeneration_Large", benchMerkleProofGeneration(largeDataset)},
 		{"MerkleRootCalculation_Small", benchMerkleRootCalculation(smallDataset)},
 		{"MerkleRootCalculation_Large", benchMerkleRootCalculation(largeDataset)},
+		{"CacheInvalidation", benchCacheInvalidation},
 	}
 
 	for _, bm := range benchmarks {
@@ -520,5 +521,19 @@ func benchMerkleRootCalculation(size int) func(b *testing.B, m *Memory) {
 		for i := 0; i < b.N; i++ {
 			_ = m.MerkleRoot()
 		}
+	}
+}
+
+func benchCacheInvalidation(b *testing.B, m *Memory) {
+	data := make([]byte, 8)
+	addresses := make([]uint64, b.N)
+	for i := range addresses {
+		addresses[i] = mathrand.Uint64()
+		m.SetUnaligned(addresses[i], data)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		m.Invalidate(addresses[i%len(addresses)])
 	}
 }

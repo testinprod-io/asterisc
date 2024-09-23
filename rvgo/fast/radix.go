@@ -1,7 +1,11 @@
 package fast
 
 import (
+	"encoding/csv"
 	"math/bits"
+	"os"
+	"strconv"
+	"sync"
 )
 
 // RadixNode is an interface defining the operations for a node in a radix trie.
@@ -14,21 +18,27 @@ type RadixNode interface {
 	MerkleizeNode(addr, gindex uint64) [32]byte
 }
 
+const SmallRadixSize = 4
+
 // SmallRadixNode is a radix trie node with a branching factor of 4 bits.
 type SmallRadixNode[C RadixNode] struct {
-	Children    [1 << 4]*C       // Array of child nodes, indexed by 4-bit keys.
-	Hashes      [1 << 4][32]byte // Cached hashes for each child node.
-	ChildExists uint16           // Bitmask indicating which children exist (1 bit per child).
-	HashValid   uint16           // Bitmask indicating which hashes are valid (1 bit per child).
-	Depth       uint64           // The depth of this node in the trie (number of bits from the root).
+	Stats       *Stats
+	Children    [1 << SmallRadixSize]*C       // Array of child nodes, indexed by 4-bit keys.
+	Hashes      [1 << SmallRadixSize][32]byte // Cached hashes for each child node.
+	ChildExists uint16                        // Bitmask indicating which children exist (1 bit per child).
+	HashValid   uint16                        // Bitmask indicating which hashes are valid (1 bit per child).
+	Depth       uint64                        // The depth of this node in the trie (number of bits from the root).
 }
+
+const LargeRadixSize = 8
 
 // LargeRadixNode is a radix trie node with a branching factor of 8 bits.
 type LargeRadixNode[C RadixNode] struct {
-	Children    [1 << 8]*C // Array of child nodes, indexed by 8-bit keys.
-	Hashes      [1 << 8][32]byte
-	ChildExists [(1 << 8) / 64]uint64
-	HashValid   [(1 << 8) / 64]uint64
+	Stats       *Stats
+	Children    [1 << LargeRadixSize]*C // Array of child nodes, indexed by 8-bit keys.
+	Hashes      [1 << LargeRadixSize][32]byte
+	ChildExists [(1 << LargeRadixSize) / 64]uint64
+	HashValid   [(1 << LargeRadixSize) / 64]uint64
 	Depth       uint64
 }
 
@@ -51,9 +61,9 @@ type L11 = *Memory
 // InvalidateNode invalidates the hash cache along the path to the specified address.
 // It marks the necessary child hashes as invalid, forcing them to be recomputed when needed.
 func (n *SmallRadixNode[C]) InvalidateNode(addr uint64) {
-	childIdx := addressToRadixPath(addr, n.Depth, 4) // Get the 4-bit child index at the current depth.
+	childIdx := addressToRadixPath(addr, n.Depth, SmallRadixSize) // Get the 4-bit child index at the current depth.
 
-	branchIdx := (childIdx + 1<<4) / 2 // Compute the index for the hash tree traversal.
+	branchIdx := (childIdx + 1<<SmallRadixSize) / 2 // Compute the index for the hash tree traversal.
 
 	// Traverse up the hash tree, invalidating hashes along the way.
 	for index := branchIdx; index > 0; index >>= 1 {
@@ -64,9 +74,9 @@ func (n *SmallRadixNode[C]) InvalidateNode(addr uint64) {
 }
 
 func (n *LargeRadixNode[C]) InvalidateNode(addr uint64) {
-	childIdx := addressToRadixPath(addr, n.Depth, 8)
+	childIdx := addressToRadixPath(addr, n.Depth, LargeRadixSize)
 
-	branchIdx := (childIdx + 1<<8) / 2
+	branchIdx := (childIdx + 1<<LargeRadixSize) / 2
 
 	for index := branchIdx; index > 0; index >>= 1 {
 		hashIndex := index >> 6
@@ -86,18 +96,18 @@ func (m *Memory) InvalidateNode(addr uint64) {
 // It collects the necessary sibling hashes along the path to reconstruct the Merkle proof.
 func (n *SmallRadixNode[C]) GenerateProof(addr uint64) [][32]byte {
 	var proofs [][32]byte
-	path := addressToRadixPath(addr, n.Depth, 4)
+	path := addressToRadixPath(addr, n.Depth, SmallRadixSize)
 
 	if n.Children[path] == nil {
 		// When no child exists at this path, the rest of the proofs are zero hashes.
-		proofs = zeroHashRange(0, 60-n.Depth-4)
+		proofs = zeroHashRange(0, 60-n.Depth-SmallRadixSize)
 	} else {
 		// Recursively generate proofs from the child node.
 		proofs = (*n.Children[path]).GenerateProof(addr)
 	}
 
 	// Collect sibling hashes along the path for the proof.
-	for idx := path + 1<<4; idx > 1; idx >>= 1 {
+	for idx := path + 1<<SmallRadixSize; idx > 1; idx >>= 1 {
 		sibling := idx ^ 1 // Get the sibling index.
 		proofs = append(proofs, n.MerkleizeNode(addr>>(64-n.Depth), sibling))
 	}
@@ -107,15 +117,15 @@ func (n *SmallRadixNode[C]) GenerateProof(addr uint64) [][32]byte {
 
 func (n *LargeRadixNode[C]) GenerateProof(addr uint64) [][32]byte {
 	var proofs [][32]byte
-	path := addressToRadixPath(addr, n.Depth, 8)
+	path := addressToRadixPath(addr, n.Depth, LargeRadixSize)
 
 	if n.Children[path] == nil {
-		proofs = zeroHashRange(0, 60-n.Depth-8)
+		proofs = zeroHashRange(0, 60-n.Depth-LargeRadixSize)
 	} else {
 		proofs = (*n.Children[path]).GenerateProof(addr)
 	}
 
-	for idx := path + 1<<8; idx > 1; idx >>= 1 {
+	for idx := path + 1<<LargeRadixSize; idx > 1; idx >>= 1 {
 		sibling := idx ^ 1
 		proofs = append(proofs, n.MerkleizeNode(addr>>(64-n.Depth), sibling))
 	}
@@ -138,7 +148,7 @@ func (m *Memory) GenerateProof(addr uint64) [][32]byte {
 func (n *SmallRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 	depth := uint64(bits.Len64(gindex)) // Get the depth of the current gindex.
 
-	if depth <= 4 {
+	if depth <= SmallRadixSize {
 		hashBit := gindex & 15
 
 		if (n.ChildExists & (1 << hashBit)) != 0 {
@@ -165,7 +175,7 @@ func (n *SmallRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 		panic("gindex too deep")
 	}
 
-	childIndex := gindex - 1<<4
+	childIndex := gindex - 1<<SmallRadixSize
 
 	if n.Children[childIndex] == nil {
 		// Return zero hash if child does not exist.
@@ -174,7 +184,7 @@ func (n *SmallRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 
 	// Update the partial address by appending the child index bits.
 	// This accumulates the address as we traverse deeper into the trie.
-	addr <<= 4
+	addr <<= SmallRadixSize
 	addr |= childIndex
 	return (*n.Children[childIndex]).MerkleizeNode(addr, 1)
 }
@@ -182,7 +192,7 @@ func (n *SmallRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 func (n *LargeRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 	depth := uint64(bits.Len64(gindex))
 
-	if depth <= 8 {
+	if depth <= LargeRadixSize {
 		hashIndex := gindex >> 6
 		hashBit := gindex & 63
 		if (n.ChildExists[hashIndex] & (1 << hashBit)) != 0 {
@@ -206,12 +216,12 @@ func (n *LargeRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 		panic("gindex too deep")
 	}
 
-	childIndex := gindex - 1<<8
+	childIndex := gindex - 1<<LargeRadixSize
 	if n.Children[int(childIndex)] == nil {
 		return zeroHashes[64-5+1-(depth+n.Depth)]
 	}
 
-	addr <<= 8
+	addr <<= LargeRadixSize
 	addr |= childIndex
 	return (*n.Children[childIndex]).MerkleizeNode(addr, 1)
 }
@@ -293,71 +303,91 @@ func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {
 
 	addr := pageIndex << PageAddrSize
 	branchPaths := m.addressToRadixPaths(addr)
+	depth := uint64(0)
 
 	// Build the radix trie path to the new page, creating nodes as necessary.
 	radixLevel1 := m.radix
+	depth += SmallRadixSize
+
 	if (*radixLevel1).Children[branchPaths[0]] == nil {
-		node := &SmallRadixNode[L3]{Depth: 4}
+		m.stats.Increment("1_alloc")
+		node := &SmallRadixNode[L3]{Depth: depth}
 		(*radixLevel1).Children[branchPaths[0]] = &node
 	}
 	radixLevel1.InvalidateNode(addr)
 
 	radixLevel2 := (*radixLevel1).Children[branchPaths[0]]
+	depth += SmallRadixSize
 	if (*radixLevel2).Children[branchPaths[1]] == nil {
-		node := &SmallRadixNode[L4]{Depth: 8}
+		m.stats.Increment("2_alloc")
+		node := &SmallRadixNode[L4]{Depth: depth}
 		(*radixLevel2).Children[branchPaths[1]] = &node
 	}
 	(*radixLevel2).InvalidateNode(addr)
 
 	radixLevel3 := (*radixLevel2).Children[branchPaths[1]]
+	depth += SmallRadixSize
 	if (*radixLevel3).Children[branchPaths[2]] == nil {
-		node := &SmallRadixNode[L5]{Depth: 12}
+		m.stats.Increment("3_alloc")
+		node := &SmallRadixNode[L5]{Depth: depth}
 		(*radixLevel3).Children[branchPaths[2]] = &node
 	}
 	(*radixLevel3).InvalidateNode(addr)
 
 	radixLevel4 := (*radixLevel3).Children[branchPaths[2]]
+	depth += SmallRadixSize
 	if (*radixLevel4).Children[branchPaths[3]] == nil {
-		node := &SmallRadixNode[L6]{Depth: 16}
+		m.stats.Increment("4_alloc")
+		node := &SmallRadixNode[L6]{Depth: depth}
 		(*radixLevel4).Children[branchPaths[3]] = &node
 	}
 	(*radixLevel4).InvalidateNode(addr)
 
 	radixLevel5 := (*radixLevel4).Children[branchPaths[3]]
+	depth += SmallRadixSize
 	if (*radixLevel5).Children[branchPaths[4]] == nil {
-		node := &SmallRadixNode[L7]{Depth: 20}
+		m.stats.Increment("5_alloc")
+		node := &SmallRadixNode[L7]{Depth: depth}
 		(*radixLevel5).Children[branchPaths[4]] = &node
 	}
 	(*radixLevel5).InvalidateNode(addr)
 
 	radixLevel6 := (*radixLevel5).Children[branchPaths[4]]
+	depth += SmallRadixSize
 	if (*radixLevel6).Children[branchPaths[5]] == nil {
-		node := &SmallRadixNode[L8]{Depth: 24}
+		m.stats.Increment("6_alloc")
+		node := &SmallRadixNode[L8]{Depth: depth}
 		(*radixLevel6).Children[branchPaths[5]] = &node
 	}
 	(*radixLevel6).InvalidateNode(addr)
 
 	radixLevel7 := (*radixLevel6).Children[branchPaths[5]]
+	depth += SmallRadixSize
 	if (*radixLevel7).Children[branchPaths[6]] == nil {
-		node := &LargeRadixNode[L9]{Depth: 28}
+		m.stats.Increment("7_alloc")
+		node := &LargeRadixNode[L9]{Depth: depth}
 		(*radixLevel7).Children[branchPaths[6]] = &node
 	}
 	(*radixLevel7).InvalidateNode(addr)
 
 	radixLevel8 := (*radixLevel7).Children[branchPaths[6]]
+	depth += LargeRadixSize
 	if (*radixLevel8).Children[branchPaths[7]] == nil {
-		node := &LargeRadixNode[L10]{Depth: 36}
+		m.stats.Increment("8_alloc")
+		node := &LargeRadixNode[L10]{Depth: depth}
 		(*radixLevel8).Children[branchPaths[7]] = &node
 	}
 	(*radixLevel8).InvalidateNode(addr)
 
 	radixLevel9 := (*radixLevel8).Children[branchPaths[7]]
+	depth += LargeRadixSize
 	if (*radixLevel9).Children[branchPaths[8]] == nil {
-		node := &LargeRadixNode[L11]{Depth: 44}
+		m.stats.Increment("9_alloc")
+		node := &LargeRadixNode[L11]{Depth: depth}
 		(*radixLevel9).Children[branchPaths[8]] = &node
 	}
 	(*radixLevel9).InvalidateNode(addr)
-
+	m.stats.Increment("10_alloc")
 	radixLevel10 := (*radixLevel9).Children[branchPaths[8]]
 	(*radixLevel10).InvalidateNode(addr)
 	(*radixLevel10).Children[branchPaths[9]] = &m
@@ -385,60 +415,114 @@ func (m *Memory) Invalidate(addr uint64) {
 
 	currentLevel1 := m.radix
 	currentLevel1.InvalidateNode(addr)
-
+	m.stats.Increment("1_invalidate")
 	radixLevel2 := (*m.radix).Children[branchPaths[0]]
 	if radixLevel2 == nil {
 		return
 	}
+	m.stats.Increment("2_invalidate")
 	(*radixLevel2).InvalidateNode(addr)
 
 	radixLevel3 := (*radixLevel2).Children[branchPaths[1]]
 	if radixLevel3 == nil {
 		return
 	}
+	m.stats.Increment("3_invalidate")
 	(*radixLevel3).InvalidateNode(addr)
 
 	radixLevel4 := (*radixLevel3).Children[branchPaths[2]]
 	if radixLevel4 == nil {
 		return
 	}
+	m.stats.Increment("4_invalidate")
 	(*radixLevel4).InvalidateNode(addr)
 
 	radixLevel5 := (*radixLevel4).Children[branchPaths[3]]
 	if radixLevel5 == nil {
 		return
 	}
+	m.stats.Increment("5_invalidate")
 	(*radixLevel5).InvalidateNode(addr)
 
 	radixLevel6 := (*radixLevel5).Children[branchPaths[4]]
 	if radixLevel6 == nil {
 		return
 	}
+	m.stats.Increment("6_invalidate")
 	(*radixLevel6).InvalidateNode(addr)
 
 	radixLevel7 := (*radixLevel6).Children[branchPaths[5]]
 	if radixLevel7 == nil {
 		return
 	}
+	m.stats.Increment("7_invalidate")
 	(*radixLevel7).InvalidateNode(addr)
 
 	radixLevel8 := (*radixLevel7).Children[branchPaths[6]]
 	if radixLevel8 == nil {
 		return
 	}
+	m.stats.Increment("8_invalidate")
 	(*radixLevel8).InvalidateNode(addr)
 
 	radixLevel9 := (*radixLevel8).Children[branchPaths[7]]
 	if radixLevel9 == nil {
 		return
 	}
+	m.stats.Increment("9_invalidate")
 	(*radixLevel9).InvalidateNode(addr)
 
 	radixLevel10 := (*radixLevel9).Children[branchPaths[8]]
 	if radixLevel10 == nil {
 		return
 	}
+	m.stats.Increment("10_invalidate")
 	(*radixLevel10).InvalidateNode(addr)
 
 	m.InvalidateNode(addr)
+}
+
+type Stats struct {
+	counts map[string]int
+	mutex  sync.Mutex // To ensure thread safety if accessing from multiple goroutines
+}
+
+func (s *Stats) Increment(key string) {
+	s.mutex.Lock()
+	s.counts[key]++
+	s.mutex.Unlock()
+}
+
+func NewStats() *Stats {
+	return &Stats{
+		counts: make(map[string]int),
+	}
+}
+
+func (s *Stats) WriteToCSV(filename string) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Optionally, write a header
+	if err := writer.Write([]string{"Key", "Count"}); err != nil {
+		return err
+	}
+
+	for key, count := range s.counts {
+		record := []string{key, strconv.Itoa(count)}
+		if err := writer.Write(record); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

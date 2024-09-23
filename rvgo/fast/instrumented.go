@@ -3,6 +3,7 @@ package fast
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 )
 
@@ -40,6 +41,13 @@ func NewInstrumentedState(state *VMState, po PreimageOracle, stdOut, stdErr io.W
 		stdErr:         stdErr,
 		preimageOracle: po,
 	}
+}
+
+func (m *InstrumentedState) Close() {
+	// When done, close the Memory instance
+	id := uuid.New()
+	m.state.Memory.statsFile = id.String()
+	m.state.Close()
 }
 
 func (m *InstrumentedState) Step(proof bool) (wit *StepWitness, err error) {
